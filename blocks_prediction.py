@@ -19,9 +19,9 @@ np.random.seed(seed)
 blocks = pd.read_csv('master_data_7_31_17_w_blocks.csv', low_memory=False)
 
 # Pick columns of interest and drop missing
-blocks = blocks[['gender', 'baptized', 'married', 'faith', 'Block', 'Section','category']]
+blocks = blocks[['gender', 'baptized', 'married', 'faith', 'Block']]
 
-blocks = blocks.dropna()
+#blocks = blocks.dropna()
 
 X = blocks.loc[:, blocks.columns != 'Block']
 y = blocks.loc[:,'Block']
@@ -36,7 +36,7 @@ X_train, X_test, y_train, y_test = train_test_split(dummy_X, dummy_y, test_size=
 
 # Build model
 # Must define as a function to work with KerasClassifier
-def get_model():
+def get_model_simple():
     model = Sequential()
     
     model.add(Dense(units=64, activation='relu', input_dim=num_vars))
@@ -48,13 +48,31 @@ def get_model():
     
     return model
 
+def get_model_complex():
+    model = Sequential()
+    
+    model.add(Dense(units=64, activation='relu', input_dim=num_vars))
+    model.add(Dense(units=64, activation='relu'))
+    model.add(Dense(units=64, activation='relu'))
+    model.add(Dense(units=uniq_y, activation='softmax'))
+    
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='adam',
+                  metrics=['accuracy'])
+    
+    return model
+
 def quick_test():
-    model = get_model()
+    model = get_model_complex()
     model.fit(X_train, y_train, epochs=5, batch_size=32)
+    
+    # TODO Add test validation steps
 
 def full_validation():
     # Helper function for leveraging sklearn functionality for testing and validation
-    estimator = KerasClassifier(build_fn=get_model, epochs=5, batch_size=32, verbose=1)
+    estimator = KerasClassifier(build_fn=get_model, epochs=5, 
+                                batch_size=32, 
+                                verbose=1)
     
     # This will train n_splits number of models
     kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
@@ -63,6 +81,6 @@ def full_validation():
     print("Baseline: %.2f%% (%.2f%%)" % (results.mean()*100, results.std()*100))
     
 if __name__ == "__main__":
-    #quick_test()
-    full_validation()
+    quick_test()
+    #full_validation()
 
