@@ -19,20 +19,24 @@ np.random.seed(seed)
 blocks = pd.read_csv('master_data_7_31_17_w_blocks.csv', low_memory=False)
 
 # Pick columns of interest and drop missing
-blocks = blocks[['gender', 'baptized', 'married', 'faith', 'Block']]
+blocks = blocks[['start_date', 'end_date', 'denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block']]
+
+# Clean up start_date and end_date
+blocks.start_date = pd.to_numeric(blocks.start_date, errors='coerce', downcast='integer')
+blocks.end_date = pd.to_numeric(blocks.end_date, errors='coerce', downcast='integer')
 
 #blocks = blocks.dropna()
 
 X = blocks.loc[:, blocks.columns != 'Block']
 y = blocks.loc[:,'Block']
 
-dummy_X = pd.get_dummies(X)
+dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith'])
 dummy_y = pd.get_dummies(y)
 
 num_vars = len(dummy_X.columns)
 uniq_y = y.unique().size
 
-X_train, X_test, y_train, y_test = train_test_split(dummy_X, dummy_y, test_size=0.33, random_state=42)
+
 
 # Build model
 # Must define as a function to work with KerasClassifier
@@ -63,14 +67,15 @@ def get_model_complex():
     return model
 
 def quick_test():
-    model = get_model_complex()
+    model = get_model_simple()
+    X_train, X_test, y_train, y_test = train_test_split(dummy_X, dummy_y, test_size=0.2, random_state=42)
     model.fit(X_train, y_train, epochs=5, batch_size=32)
     
     # TODO Add test validation steps
 
 def full_validation():
     # Helper function for leveraging sklearn functionality for testing and validation
-    estimator = KerasClassifier(build_fn=get_model, epochs=5, 
+    estimator = KerasClassifier(build_fn=get_model_complex, epochs=5, 
                                 batch_size=32, 
                                 verbose=1)
     
