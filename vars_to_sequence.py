@@ -27,10 +27,14 @@ import numpy as np
 import random as rand
 
 # Set seed for reproducible results
-seed = 123
+seed = 12
 np.random.seed(seed)
 
-X = ['dog', 'dog', 'cat', 'cat', 'apple', 'apple'] * 1000
+X1 = ['dog', 'dog', 'cat', 'cat', 'apple', 'apple'] * 1000
+X2 = ['ran', 'walked', 'ran', 'walked', 'are', 'taste'] * 1000
+X3 = ['fast', 'fast', 'slow', 'slow', 'good', 'good'] * 1000
+
+X = pd.DataFrame(list(zip(X1, X2, X3)))
 
 Y_text = ['Dog ran fast', 'Dog walked fast', 'Cat ran slow', 'Cat walked slow', 'Apples are good', 'Apples taste good'] * 1000
 
@@ -59,7 +63,7 @@ def word_tokenizer(text):
         return [dictionary[word] for word in kpt.text_to_word_sequence(text)]
     
     allWordIndices = []
-    # for each tweet, change each token to its ID in the Tokenizer's word_index
+    # for each text, change each token to its ID in the Tokenizer's word_index
     for t in text:
         wordIndices = convert_text_to_index_array(t)
         allWordIndices.append(wordIndices)
@@ -78,31 +82,57 @@ y = word_tokenizer(Y_text)
 # Split into training and test sets
 X_train, X_test, y_train, y_test = train_test_split(dummy_X, y, test_size=0.2, random_state=42)
 
-model = Sequential()
-model.add(Dense(units=64, activation='relu', input_dim=3)) # 3 variables, dog, cat, or apple
-model.add(Dense(10)) # 10 possible words
-#model.add(Dropout(0.3)) # Prevent over training
-model.add(Activation('softmax'))
-model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+# Build our model to predict words from variables
+def simple():
+    model = Sequential()
+    model.add(Dense(units=64, activation='relu', input_dim=10)) # 10 dummy variables
+    model.add(Dense(10)) # 10 possible words
+    #model.add(Dropout(0.3)) # Prevent over fitting
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+    
+    return model
 
-model.fit(X_train, y_train, epochs=30, batch_size=10)
+def deeper():
+    model = Sequential()
+    model.add(Dense(units=64, activation='relu', input_dim=10)) # 10 dummary variables
+    model.add(Dense(units=64, activation='relu'))
+    model.add(Dense(units=64, activation='relu'))
+    model.add(Dense(10)) # 10 possible words
+    #model.add(Dropout(0.3)) # Prevent over fitting
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+    
+    return model
+    
+def lstm():
+    model = Sequential()
+    model.add(Dense(units=64, activation='relu', input_dim=3)) # 10 variables
+    model.add(Dense(10)) # 10 possible words
+    #model.add(Dropout(0.3)) # Prevent over fitting
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+    
+    return model
+
+model = deeper()
+model.fit(X_train, y_train, epochs=30, batch_size=100)
 
 # Make Precictions
-
 predict = model.predict(X_test)
 
 # Transform back to words
-
 words_idx = list(dictionary.keys())
 
-# Print results for first 5 test sets
-for i in range(5):
+# Print results for first N test sets
+for i in range(10):
     vari = X_test.iloc[i]
     rowi_probs = predict[i,:]
-    maxi_idx = np.argpartition(rowi_probs, -3)[-3:] # Top 3 max probs
+    maxi_idx = np.argpartition(rowi_probs, -3)[-3:] # Top 3 max probs indexes
     texti = [words_idx[i] for i in maxi_idx]
     
     # Show results
+    print('--------')
     print(vari)
     print(texti)
 
