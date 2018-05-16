@@ -42,9 +42,9 @@ Y_text = ['Dog ran fast', 'Dog walked fast', 'Cat ran slow', 'Cat walked slow', 
 dummy_X = pd.get_dummies(X)
 
 # Need to convert text to matrix of indexes
-def word_tokenizer(text):
+def encode_text(text):
     # only work with the 10 most popular words found in our dataset
-    max_words = 10
+    max_words = 10+1
     
     # create a new Tokenizer
     tokenizer = Tokenizer(num_words=max_words)
@@ -56,28 +56,11 @@ def word_tokenizer(text):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    def convert_text_to_index_array(text):
-        # one really important thing that `text_to_word_sequence` does
-        # is make all texts the same length -- in this case, the length
-        # of the longest text in the set.
-        return [dictionary[word] for word in kpt.text_to_word_sequence(text)]
-    
-    allWordIndices = []
-    # for each text, change each token to its ID in the Tokenizer's word_index
-    for t in text:
-        wordIndices = convert_text_to_index_array(t)
-        allWordIndices.append(wordIndices)
-    
-    # now we have a list of all text converted to index arrays.
-    # cast as an array for future usage.
-    #allWordIndices = np.asarray(allWordIndices)
-
-    # create one-hot matrices out of the indexed tweets
-    result = tokenizer.sequences_to_matrix(allWordIndices, mode='binary')
+    result = tokenizer.texts_to_matrix(text, mode='binary')
     
     return result
 
-y = word_tokenizer(Y_text)
+y = encode_text(Y_text)
 
 # Split into training and test sets
 X_train, X_test, y_train, y_test = train_test_split(dummy_X, y, test_size=0.2, random_state=42)
@@ -86,7 +69,7 @@ X_train, X_test, y_train, y_test = train_test_split(dummy_X, y, test_size=0.2, r
 def simple():
     model = Sequential()
     model.add(Dense(units=64, activation='relu', input_dim=10)) # 10 dummy variables
-    model.add(Dense(10)) # 10 possible words
+    model.add(Dense(11)) # 10 possible words
     #model.add(Dropout(0.3)) # Prevent over fitting
     model.add(Activation('softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
@@ -98,7 +81,7 @@ def deeper():
     model.add(Dense(units=64, activation='relu', input_dim=10)) # 10 dummary variables
     model.add(Dense(units=64, activation='relu'))
     model.add(Dense(units=64, activation='relu'))
-    model.add(Dense(10)) # 10 possible words
+    model.add(Dense(11)) # 10 possible words
     #model.add(Dropout(0.3)) # Prevent over fitting
     model.add(Activation('softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
@@ -115,7 +98,7 @@ def lstm():
     
     return model
 
-model = deeper()
+model = simple()
 model.fit(X_train, y_train, epochs=30, batch_size=100)
 
 # Make Precictions
@@ -129,7 +112,7 @@ for i in range(10):
     vari = X_test.iloc[i]
     rowi_probs = predict[i,:]
     maxi_idx = np.argpartition(rowi_probs, -3)[-3:] # Top 3 max probs indexes
-    texti = [words_idx[i] for i in maxi_idx]
+    texti = [words_idx[i-1] for i in maxi_idx]
     
     # Show results
     print('--------')
