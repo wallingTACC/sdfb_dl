@@ -68,37 +68,59 @@ X_train, X_test, y_train, y_test = train_test_split(dummy_X, y, test_size=0.2, r
 # Build our model to predict words from variables
 def simple():
     model = Sequential()
+    
+    # Input
     model.add(Dense(units=64, activation='relu', input_dim=10)) # 10 dummy variables
+    
+    # Output
     model.add(Dense(11)) # 10 possible words
     #model.add(Dropout(0.3)) # Prevent over fitting
     model.add(Activation('softmax'))
+    
+    
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
     
     return model
 
 def deeper():
     model = Sequential()
+    
+     # Input
     model.add(Dense(units=64, activation='relu', input_dim=10)) # 10 dummary variables
+    
+    # Hidden
     model.add(Dense(units=64, activation='relu'))
     model.add(Dense(units=64, activation='relu'))
+    
+    # Output
     model.add(Dense(11)) # 10 possible words
     #model.add(Dropout(0.3)) # Prevent over fitting
     model.add(Activation('softmax'))
+    
+    
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
     
     return model
     
 def lstm():
     model = Sequential()
-    model.add(Dense(units=64, activation='relu', input_dim=3)) # 10 variables
-    model.add(Dense(10)) # 10 possible words
+    
+    # Input
+    model.add(Dense(units=64, activation='relu', input_dim=10)) # 10 variables
+    
+    # Middle
+    
+    # Output
+    model.add(Dense(11)) # 10 possible words
     #model.add(Dropout(0.3)) # Prevent over fitting
     model.add(Activation('softmax'))
+    
+
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
     
     return model
 
-model = simple()
+model = lstm()
 model.fit(X_train, y_train, epochs=30, batch_size=100)
 
 # Make Precictions
