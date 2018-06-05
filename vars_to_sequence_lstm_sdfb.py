@@ -25,21 +25,52 @@ import pandas as pd
 import numpy as np
 import random as rand
 
-# Set seed for reproducible results
-seed = 12
+# Set seeds to any randomness below
+seed = 123
 np.random.seed(seed)
 
-X1 = ['dog', 'dog', 'cat', 'cat', 'apple', 'apple'] * 10
-X2 = ['ran', 'walked', 'ran', 'walked', 'are', 'taste'] * 10
-X3 = ['fast', 'fast', 'slow', 'slow', 'good', 'good'] * 10
+# Prep the data
 
-X = pd.DataFrame(list(zip(X1, X2, X3)))
+blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
 
-Y_text = ['The dog ran fast down the road', 'The dog walked fast along the trail', 
-          'A cat ran slow up the fence', 'The cat walked slow on the branch', 
-          'Apples are good for your health', 'Apples taste good and clean your teeth'] * 10
-# One-hot encode categorical variables
-dummy_X = pd.get_dummies(X)
+# Dev - Randomly select 1000
+blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 10)]
+
+# Save article ids for matching
+doc_ids = blocks.article_id
+
+# Pick columns of interest and drop missing
+blocks = blocks[['start_date', 'end_date', 'denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block']]
+
+# Clean up start_date and end_date
+blocks.start_date = pd.to_numeric(blocks.start_date, errors='coerce', downcast='integer')
+blocks.end_date = pd.to_numeric(blocks.end_date, errors='coerce', downcast='integer')
+
+#blocks = blocks.dropna()
+
+#X = blocks.loc[:, blocks.columns != 'Block']
+#y = blocks.loc[:,'Block']
+
+X = blocks
+dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block'])
+#dummy_y = pd.get_dummies(y)
+
+num_vars = len(dummy_X.columns)
+#uniq_y = y.unique().size
+
+# Text Data
+# Need to read in a files in data dir matching article_ids
+article_text = []
+data_dir = '/data/sdfb/ODNB_Entries_as_Textfiles/'
+for doc_id in doc_ids:
+    file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
+    print(file)
+    text = open(file, 'r').read()
+    if text != None:
+        article_text.append(text)
+    else:
+        article_text.append('')
+
 
 # Need to create 'seed' and 'next' text examples, where seed is length 3 and next length 1 word
 # Each 'seed' becomes an observation for training
@@ -47,7 +78,7 @@ dummy_X = pd.get_dummies(X)
 #         'The dog ran' -> 'fast'
 #         'dog ran fast' -> 'down'
 #         'ran fast down' -> 'the'
-def encode_text(data, text, seed_len=4, out_len=1, step=1):
+def encode_text(data, text, seed_len=10, out_len=1, step=5):
     
     # First encode the text
     tokenizer = Tokenizer()
@@ -72,7 +103,7 @@ def encode_text(data, text, seed_len=4, out_len=1, step=1):
     return new_data        
 
 
-encoded = encode_text(dummy_X, Y_text)
+encoded = encode_text(dummy_X, article_text)
 
 vocab_size = len(dictionary) + 1
 X = encoded.loc[:, encoded.columns != 'next_words']
@@ -97,7 +128,7 @@ X_vars_test = X_test.loc[:, X_train.columns != 'seed']
    
 def lstm_w_vars():
     
-    text_seed_len = 4
+    text_seed_len = 10
     num_vars = 10
     
     # LSTM 
