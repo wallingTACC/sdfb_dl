@@ -25,6 +25,8 @@ import pandas as pd
 import numpy as np
 import random as rand
 
+from multiprocessing import Pool
+
 # Set seeds to any randomness below
 seed = 123
 np.random.seed(seed)
@@ -34,7 +36,7 @@ np.random.seed(seed)
 blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
 
 # Dev - Randomly select 1000
-blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 10)]
+blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 5)]
 
 # Save article ids for matching
 doc_ids = blocks.article_id
@@ -72,6 +74,20 @@ for doc_id in doc_ids:
         article_text.append('')
 
 
+# Need to encapsulate this part in a function for use with multiprocessing
+def row_encode(idx, data, encoded, seed_len=10, out_len=1, step=5):
+    new_data = pd.DataFrame()
+    words = encoded[idx]
+    num_words = len(words)
+    
+    for j in range(0, num_words - seed_len, step):
+        row = data.iloc[idx]
+        row['seed'] = words[j: j + seed_len]
+        row['next_words'] = words[j+seed_len:j+seed_len+out_len]
+        new_data = new_data.append(row) 
+        
+    return new_data
+
 # Need to create 'seed' and 'next' text examples, where seed is length 3 and next length 1 word
 # Each 'seed' becomes an observation for training
 # Ex: 'The dog ran fast down the road'
@@ -88,21 +104,14 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    # Want to match up categorical vars and the encoded text
-    new_data = pd.DataFrame()
-    for i in range(data.shape[0]): # Num rows
-        words = encoded[i]
-        num_words = len(words)
-        
-        for j in range(0, num_words - seed_len, step):
-            row = data.iloc[i]
-            row['seed'] = words[j: j + seed_len]
-            row['next_words'] = words[j+seed_len:j+seed_len+out_len]
-            new_data = new_data.append(row)
-            
-    return new_data        
-
-
+    p = Pool(5)
+    new_data_list = p.starmap(row_encode, [(i, data, encoded) for i in range(data.shape[0])])
+    
+    # Combine list of new dataframes to single one 
+    result = pd.concat(new_data_list)
+    
+    return(result)
+           
 encoded = encode_text(dummy_X, article_text)
 
 vocab_size = len(dictionary) + 1
@@ -129,7 +138,6 @@ X_vars_test = X_test.loc[:, X_train.columns != 'seed']
 def lstm_w_vars():
     
     text_seed_len = 10
-    num_vars = 10
     
     # LSTM 
     lstm_model = Sequential()
