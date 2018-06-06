@@ -76,13 +76,13 @@ for doc_id in doc_ids:
 
 
 # Need to encapsulate this part in a function for use with multiprocessing
-def row_encode(idx, data, encoded, seed_len=10, out_len=1, step=5):
+def row_encode(idx, row, words, seed_len=10, out_len=1, step=5):
+    print(idx)
     new_data = pd.DataFrame()
-    words = encoded[idx]
     num_words = len(words)
     
     for j in range(0, num_words - seed_len, step):
-        row = data.iloc[idx]
+        #row = data.iloc[idx]
         row['seed'] = words[j: j + seed_len]
         row['next_words'] = words[j+seed_len:j+seed_len+out_len]
         new_data = new_data.append(row) 
@@ -106,7 +106,7 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     dictionary = tokenizer.word_index
     
     p = Pool(12)
-    new_data_list = p.starmap(row_encode, [(i, data, encoded) for i in range(data.shape[0])])
+    new_data_list = p.starmap(row_encode, [(i, data.iloc[i], encoded[i]) for i in range(data.shape[0])])
     p.close()
     
     # Combine list of new dataframes to single one 
@@ -114,9 +114,11 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     
     return(result)
            
-encoded = encode_text(dummy_X, article_text)
-
-encoded.to_pickle('encoded.pkl')
+if True:
+    encoded = encode_text(dummy_X, article_text)
+    encoded.to_pickle('encoded.pkl')
+else:
+    encoded = pd.read_pickle('encoded.pkl')
 
 vocab_size = len(dictionary) + 1
 X = encoded.loc[:, encoded.columns != 'next_words']
