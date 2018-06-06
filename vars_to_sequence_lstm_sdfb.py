@@ -26,6 +26,7 @@ import numpy as np
 import random as rand
 
 from multiprocessing import Pool
+import pickle
 
 # Set seeds to any randomness below
 seed = 123
@@ -36,7 +37,7 @@ np.random.seed(seed)
 blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
 
 # Dev - Randomly select 1000
-blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 5)]
+blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
 
 # Save article ids for matching
 doc_ids = blocks.article_id
@@ -63,7 +64,7 @@ num_vars = len(dummy_X.columns)
 # Text Data
 # Need to read in a files in data dir matching article_ids
 article_text = []
-data_dir = '/data/sdfb/ODNB_Entries_as_Textfiles/'
+data_dir = 'data/ODNB_Entries_as_Textfiles/'
 for doc_id in doc_ids:
     file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
     print(file)
@@ -104,8 +105,9 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    p = Pool(5)
+    p = Pool(12)
     new_data_list = p.starmap(row_encode, [(i, data, encoded) for i in range(data.shape[0])])
+    p.close()
     
     # Combine list of new dataframes to single one 
     result = pd.concat(new_data_list)
@@ -113,6 +115,8 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     return(result)
            
 encoded = encode_text(dummy_X, article_text)
+
+encoded.to_pickle('encoded.pkl')
 
 vocab_size = len(dictionary) + 1
 X = encoded.loc[:, encoded.columns != 'next_words']
@@ -122,6 +126,10 @@ X = encoded.loc[:, encoded.columns != 'next_words']
 seqs = [i for i in encoded['next_words']]
 y = k_utils.to_categorical(seqs, num_classes=vocab_size)
 
+# Save temp results
+#with open('temp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+#    pickle.dump([X, y], f)
+    
 # Split into training and test sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -159,12 +167,16 @@ def lstm_w_vars():
 
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
     
+    print(model)
+    
     return model
 
 model = lstm_w_vars()
 
 
 model.fit([X_text_mat_train, X_vars_train], y_train, epochs=100, batch_size=10)
+
+model.save('vars_to_sequence_lstm_sdfb.h5')
 
 predict = model.predict([X_text_mat_test, X_vars_test])
 
