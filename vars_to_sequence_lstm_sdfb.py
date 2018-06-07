@@ -105,7 +105,7 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    p = Pool(12)
+    p = Pool(24)
     new_data_list = p.starmap(row_encode, [(i, data.iloc[i], encoded[i]) for i in range(data.shape[0])])
     p.close()
     
@@ -113,12 +113,17 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     result = pd.concat(new_data_list)
     
     return(result)
-           
+      
+# Encoding stuff takes awhile, save it for re-use    
 if True:
     encoded = encode_text(dummy_X, article_text)
     encoded.to_pickle('encoded.pkl')
+    with open('dictionary.pkl', 'wb') as f:
+        pickle.dump(dictionary, f)
 else:
     encoded = pd.read_pickle('encoded.pkl')
+    with open('dictionary.pkl') as f:
+        dictionary = pickle.load(f)
 
 vocab_size = len(dictionary) + 1
 X = encoded.loc[:, encoded.columns != 'next_words']
