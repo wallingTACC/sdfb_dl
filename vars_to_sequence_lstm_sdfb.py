@@ -32,47 +32,49 @@ import pickle
 seed = 123
 np.random.seed(seed)
 
-# Prep the data
+PROCESS_DATA = False
 
-blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
-
-# Dev - Randomly select 1000
-blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
-
-# Save article ids for matching
-doc_ids = blocks.article_id
-
-# Pick columns of interest and drop missing
-blocks = blocks[['start_date', 'end_date', 'denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block']]
-
-# Clean up start_date and end_date
-blocks.start_date = pd.to_numeric(blocks.start_date, errors='coerce', downcast='integer')
-blocks.end_date = pd.to_numeric(blocks.end_date, errors='coerce', downcast='integer')
-
-#blocks = blocks.dropna()
-
-#X = blocks.loc[:, blocks.columns != 'Block']
-#y = blocks.loc[:,'Block']
-
-X = blocks
-dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block'])
-#dummy_y = pd.get_dummies(y)
-
-num_vars = len(dummy_X.columns)
-#uniq_y = y.unique().size
-
-# Text Data
-# Need to read in a files in data dir matching article_ids
-article_text = []
-data_dir = 'data/ODNB_Entries_as_Textfiles/'
-for doc_id in doc_ids:
-    file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
-    print(file)
-    text = open(file, 'r').read()
-    if text != None:
-        article_text.append(text)
-    else:
-        article_text.append('')
+if PROCESS_DATA:
+    # Prep the data
+    blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
+    
+    # Dev - Randomly select 1000
+    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
+    
+    # Save article ids for matching
+    doc_ids = blocks.article_id
+    
+    # Pick columns of interest and drop missing
+    blocks = blocks[['start_date', 'end_date', 'denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block']]
+    
+    # Clean up start_date and end_date
+    blocks.start_date = pd.to_numeric(blocks.start_date, errors='coerce', downcast='integer')
+    blocks.end_date = pd.to_numeric(blocks.end_date, errors='coerce', downcast='integer')
+    
+    #blocks = blocks.dropna()
+    
+    #X = blocks.loc[:, blocks.columns != 'Block']
+    #y = blocks.loc[:,'Block']
+    
+    X = blocks
+    dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block'])
+    #dummy_y = pd.get_dummies(y)
+    
+    num_vars = len(dummy_X.columns)
+    #uniq_y = y.unique().size
+    
+    # Text Data
+    # Need to read in a files in data dir matching article_ids
+    article_text = []
+    data_dir = 'data/ODNB_Entries_as_Textfiles/'
+    for doc_id in doc_ids:
+        file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
+        print(file)
+        text = open(file, 'r').read()
+        if text != None:
+            article_text.append(text)
+        else:
+            article_text.append('')
 
 
 # Need to encapsulate this part in a function for use with multiprocessing
@@ -115,23 +117,24 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     return(result)
       
 # Encoding stuff takes awhile, save it for re-use    
-if True:
+if PROCESS_DATA:
     encoded = encode_text(dummy_X, article_text)
     encoded.to_pickle('encoded.pkl')
     with open('dictionary.pkl', 'wb') as f:
         pickle.dump(dictionary, f)
 else:
     encoded = pd.read_pickle('encoded.pkl')
-    with open('dictionary.pkl') as f:
+    with open('dictionary.pkl', 'rb') as f:
         dictionary = pickle.load(f)
 
 vocab_size = len(dictionary) + 1
 X = encoded.loc[:, encoded.columns != 'next_words']
 #X_text = encoded['seed']
 
-# Have to one-hot-encode the output
+
 seqs = [i for i in encoded['next_words']]
-y = k_utils.to_categorical(seqs, num_classes=vocab_size)
+#y = k_utils.to_categorical(seqs, num_classes=vocab_size) # Stanard is to one-hot-encode the output
+y = seqs # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
 
 # Save temp results
 #with open('temp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
@@ -172,7 +175,7 @@ def lstm_w_vars():
     model.add(Activation('softmax'))
     
 
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
     
     print(model)
     
