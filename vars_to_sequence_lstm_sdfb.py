@@ -151,6 +151,8 @@ X_vars_train = X_train.loc[:, X_train.columns != 'seed']
 X_text_mat_test = np.array([i for i in X_test['seed']])
 X_vars_test = X_test.loc[:, X_train.columns != 'seed']
 
+num_vars = len(X_vars_train.columns)
+
 # Build our model to predict words from variables
    
 def lstm_w_vars():
@@ -184,7 +186,7 @@ def lstm_w_vars():
 model = lstm_w_vars()
 
 
-model.fit([X_text_mat_train, X_vars_train], y_train, epochs=100, batch_size=10)
+model.fit([X_text_mat_train, X_vars_train], y_train, epochs=10, batch_size=10)
 
 model.save('vars_to_sequence_lstm_sdfb.h5')
 
