@@ -127,14 +127,14 @@ else:
     with open('dictionary.pkl', 'rb') as f:
         dictionary = pickle.load(f)
 
-vocab_size = len(dictionary) + 1
+vocab_size = len(dictionary) + 1 # Column 0 is always 0 ?
 X = encoded.loc[:, encoded.columns != 'next_words']
 #X_text = encoded['seed']
 
 
 seqs = [i for i in encoded['next_words']]
 #y = k_utils.to_categorical(seqs, num_classes=vocab_size) # Stanard is to one-hot-encode the output
-y = seqs # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
+y = np.array(seqs) # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
 
 # Save temp results
 #with open('temp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
@@ -177,7 +177,7 @@ def lstm_w_vars():
     model.add(Activation('softmax'))
     
 
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
     
     print(model)
     
