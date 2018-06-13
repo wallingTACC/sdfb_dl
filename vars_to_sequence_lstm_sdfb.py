@@ -151,7 +151,7 @@ else:
     with open('dictionary.pkl', 'rb') as f:
         dictionary = pickle.load(f)
 
-vocab_size = len(dictionary) + 1
+vocab_size = len(dictionary) + 1 # Column 0 is always 0 ?
 X = encoded.loc[:, encoded.columns != 'next_words']
 #X_text = encoded['seed']
 
