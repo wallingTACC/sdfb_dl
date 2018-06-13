@@ -56,14 +56,14 @@ if 'session' in locals() and session is not None:
 seed = 123
 np.random.seed(seed)
 
-PROCESS_DATA = False
+PROCESS_DATA = True 
 
 if PROCESS_DATA:
     # Prep the data
     blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
     
     # Dev - Randomly select 1000
-    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
+    #blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
     
     # Save article ids for matching
     doc_ids = blocks.article_id
@@ -112,6 +112,9 @@ def row_encode(idx, row, words, seed_len=10, out_len=1, step=5):
         row['seed'] = words[j: j + seed_len]
         row['next_words'] = words[j+seed_len:j+seed_len+out_len]
         new_data = new_data.append(row) 
+
+    # Checkpoint
+    new_data.to_pickle('data/pickle/'+str(idx)+'.pkl')
         
     return new_data
 
@@ -211,8 +214,8 @@ def lstm_w_vars():
 model, parallel_model = lstm_w_vars()
 
 # checkpoint
-filepath="weights-{epoch:02d}-{val_acc:.2f}.hdf5"
-checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=25)
+filepath="weights-{epoch:02d}.hdf5"
+checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=50)
 callbacks_list = [checkpoint]
 
 parallel_model.fit([X_text_mat_train, X_vars_train], y_train, epochs=500, batch_size=512, callbacks=callbacks_list)
