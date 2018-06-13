@@ -15,6 +15,9 @@ import keras.utils as k_utils
 import keras.preprocessing.text as kpt
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing import sequence
+from keras.utils import multi_gpu_model
+from keras.callbacks import ModelCheckpoint
+import tensorflow as tf
 
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import KFold
@@ -27,6 +30,27 @@ import random as rand
 
 from multiprocessing import Pool
 import pickle
+
+if 'session' in locals() and session is not None:
+    print('Close interactive session')
+    session.close()
+
+# Configure Tensorflow session
+#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.3)
+#sess = tf.Session(config=tf.ConfigProto(
+#  allow_soft_placement=True, log_device_placement=True))
+
+#config = tf.ConfigProto()
+#config.gpu_options.allow_growth=True
+#sess = tf.Session(config=config)
+
+#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
+#sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+
+#from keras.backend.tensorflow_backend import set_session
+#config = tf.ConfigProto()
+#config.gpu_options.per_process_gpu_memory_fraction = 0.3
+#set_session(tf.Session(config=config))
 
 # Set seeds to any randomness below
 seed = 123
@@ -134,7 +158,7 @@ X = encoded.loc[:, encoded.columns != 'next_words']
 
 seqs = [i for i in encoded['next_words']]
 #y = k_utils.to_categorical(seqs, num_classes=vocab_size) # Stanard is to one-hot-encode the output
-y = seqs # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
+y = np.array(seqs) # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
 
 # Save temp results
 #with open('temp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
@@ -151,7 +175,7 @@ X_vars_train = X_train.loc[:, X_train.columns != 'seed']
 X_text_mat_test = np.array([i for i in X_test['seed']])
 X_vars_test = X_test.loc[:, X_train.columns != 'seed']
 
-num_vars = len(X_vars_train.columns)
+num_vars = len(X_vars_train.columns) # Reset num_vars after above manipulations
 
 # Build our model to predict words from variables
    
@@ -177,48 +201,55 @@ def lstm_w_vars():
     model.add(Activation('softmax'))
     
 
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+
+    parallel_model = multi_gpu_model(model)
+    parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
     
-    print(model)
-    
-    return model
+    return model, parallel_model
 
-model = lstm_w_vars()
+model, parallel_model = lstm_w_vars()
 
+# checkpoint
+filepath="weights-{epoch:02d}-{val_acc:.2f}.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=25)
+callbacks_list = [checkpoint]
 
-model.fit([X_text_mat_train, X_vars_train], y_train, epochs=10, batch_size=10)
+parallel_model.fit([X_text_mat_train, X_vars_train], y_train, epochs=500, batch_size=512, callbacks=callbacks_list)
 
-model.save('vars_to_sequence_lstm_sdfb.h5')
+model.set_weights(parallel_model.get_weights())
 
-predict = model.predict([X_text_mat_test, X_vars_test])
+model.save('final_weights.h5')
+
+#predict = model.predict([X_text_mat_test, X_vars_test])
 
 # Each prediction gives us the  probability of the next word given previous words and data
 
-def generate_next_word(fitted_model, X_vars, seed=['the', 'dog', 'ran']):
+#def generate_next_word(fitted_model, X_vars, seed=['the', 'dog', 'ran']):
     
-    seed_text_ints = np.asarray([dictionary[w] for w in seed]).reshape(1,len(seed))
-    probs = fitted_model.predict([seed_text_ints, X_vars])
-    
-    max_prob_idx = np.argmax(probs)
-    
-    words_idx = list(dictionary.keys())
-    
-    word = words_idx[max_prob_idx-1]
-    
-    return word
+#    seed_text_ints = np.asarray([dictionary[w] for w in seed]).reshape(1,len(seed))
+#    probs = fitted_model.predict([seed_text_ints, X_vars])
+#    
+#    max_prob_idx = np.argmax(probs)
+#    
+#    words_idx = list(dictionary.keys())
+#    
+#    word = words_idx[max_prob_idx-1]
+#    
+#    return word
 
 # Start generating text and keep adding to the result, sliding window 1 word each time
 # Use the nth example in our test set
-test_idx = 5
-words_idx = list(dictionary.keys())
-test_seed = [words_idx[i-1] for i in X_text_mat_test[test_idx]]
-test_vars = X_vars_test.iloc[test_idx].reshape(1,10)
-result = test_seed
-for i in range(3):
-    seed = result[i:i+len(test_seed)]
-    next_word = generate_next_word(model, X, seed)
-    print(seed)
-    print(next_word)
-    result.append(next_word)
+#test_idx = 5
+#words_idx = list(dictionary.keys())
+#test_seed = [words_idx[i-1] for i in X_text_mat_test[test_idx]]
+#test_vars = X_vars_test.iloc[test_idx].reshape(1,10)
+#result = test_seed
+#for i in range(3):
+#    seed = result[i:i+len(test_seed)]
+#    next_word = generate_next_word(model, X, seed)
+#    print(seed)
+#    print(next_word)
+#    result.append(next_word)
     
-print(result)
+#print(result)
