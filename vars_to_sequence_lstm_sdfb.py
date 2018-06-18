@@ -27,7 +27,7 @@ from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 import numpy as np
 import random as rand
-
+import os
 from multiprocessing import Pool
 import pickle
 
@@ -100,9 +100,18 @@ if PROCESS_DATA:
         else:
             article_text.append('')
 
+with open('article_text.pkl', 'wb') as f:
+        pickle.dump(article_text, f)
+
+# Get list of already processed docs
+processed_ids = [int(".".join(f.split(".")[:-1])) for f in os.listdir('data/pickle')]
 
 # Need to encapsulate this part in a function for use with multiprocessing
 def row_encode(idx, row, words, seed_len=10, out_len=1, step=5):
+    if idx in processed_ids:
+        print('Skipping ' + str(idx))
+        return
+
     print(idx)
     new_data = pd.DataFrame()
     num_words = len(words)
@@ -134,7 +143,7 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    p = Pool(24)
+    p = Pool(12)
     new_data_list = p.starmap(row_encode, [(i, data.iloc[i], encoded[i]) for i in range(data.shape[0])])
     p.close()
     
