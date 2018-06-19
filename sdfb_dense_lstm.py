@@ -12,9 +12,7 @@ from keras.models import Sequential
 from keras.layers import Dense, LSTM, SimpleRNN, Embedding, Activation, TimeDistributed, Dropout, Merge
 from keras.wrappers.scikit_learn import KerasClassifier
 import keras.utils as k_utils
-import keras.preprocessing.text as kpt
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing import sequence
+
 from keras.utils import multi_gpu_model
 from keras.callbacks import ModelCheckpoint
 import tensorflow as tf
@@ -104,19 +102,16 @@ def get_articles(doc_ids):
     return article_text
 
 # Need to encapsulate this part in a function for use with multiprocessing
-def row_encode(idx, words, seed_len=10, out_len=1, step=5):
-    #if idx in processed_ids:
-    #    print('Skipping ' + str(idx))
-    #    return
+def row_encode(doc_id, words, seed_len=10, out_len=1, step=5):
 
-    print(idx)
+    print(doc_id)
     num_words = len(words)
     
     row_list = []    
     for j in range(0, num_words - seed_len, step):
         #row = data.iloc[idx]
         row = {}
-        row['id'] = idx
+        row['doc_id'] = doc_id
         row['seed'] = words[j: j + seed_len]
         row['next_words'] = words[j+seed_len:j+seed_len+out_len]
         row_list.append(row) 

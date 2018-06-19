@@ -23,7 +23,9 @@ class SDFBDataGenerator(keras.utils.Sequence):
         with open('data/article_text.pkl', 'rb') as f:
             self.article_text = pickle.load(f)
         self.dummy_X = pd.read_pickle('data/dummy_X.pkl')
+        self.dummy_X.set_index('doc_id')
         self.seeds = pd.read_pickle('data/seeds.pkl')
+        self.dummy_X.set_index('doc_id')
 
     def __len__(self):
         'Denotes the number of batches per epoch'
@@ -40,6 +42,7 @@ class SDFBDataGenerator(keras.utils.Sequence):
         # Generate data
         X_text_mat_train, dummy_X_temp, y_temp = self.__data_generation(list_IDs_temp)
 
+        # Must pass in [X1, X2], y format for multi-input models
         return [X_text_mat_train, dummy_X_temp], y_temp
 
     def on_epoch_end(self):
@@ -55,8 +58,11 @@ class SDFBDataGenerator(keras.utils.Sequence):
         
         dummy_X_temp = self.dummy_X[self.dummy_X['doc_id'].isin(doc_ids_temp)]
         
+        # Join seeds_temp to dummy_X_temp on doc_id=id
+        joined_temp = dummy_X_temp.join(seeds_temp, on='doc_id')
+        
         # Drop doc_id column
-        dummy_X_temp.drop('doc_id', axis=1)
+        dummy_X_temp = dummy_X_temp.drop('doc_id', axis=1)
         
         X_text_mat_train = np.array([i for i in seeds_temp['seed']])
         y_temp = np.array([i for i in seeds_temp['next_words']])
