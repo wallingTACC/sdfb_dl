@@ -89,41 +89,49 @@ if PROCESS_DATA:
     
     # Text Data
     # Need to read in a files in data dir matching article_ids
-    article_text = []
-    data_dir = 'data/ODNB_Entries_as_Textfiles/'
-    for doc_id in doc_ids:
-        file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
-        print(file)
-        text = open(file, 'r').read()
-        if text != None:
-            article_text.append(text)
-        else:
-            article_text.append('')
+    if False:
+        article_text = []
+        data_dir = 'data/ODNB_Entries_as_Textfiles/'
+        for doc_id in doc_ids:
+            file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
+            print(file)
+            text = open(file, 'r').read()
+            if text != None:
+                article_text.append(text)
+            else:
+                article_text.append('')
 
-with open('article_text.pkl', 'wb') as f:
-        pickle.dump(article_text, f)
+        with open('article_text.pkl', 'wb') as f:
+            pickle.dump(article_text, f)
+    else:
+        with open('article_text.pkl', 'rb') as f:
+            print('Loading article_text.pkl')
+            article_text = pickle.load(f)
 
 # Get list of already processed docs
-processed_ids = [int(".".join(f.split(".")[:-1])) for f in os.listdir('data/pickle')]
+#processed_ids = [int(".".join(f.split(".")[:-1])) for f in os.listdir('data/pickle')]
 
 # Need to encapsulate this part in a function for use with multiprocessing
-def row_encode(idx, row, words, seed_len=10, out_len=1, step=5):
-    if idx in processed_ids:
-        print('Skipping ' + str(idx))
-        return
+def row_encode(idx, words, seed_len=10, out_len=1, step=5):
+    #if idx in processed_ids:
+    #    print('Skipping ' + str(idx))
+    #    return
 
     print(idx)
-    new_data = pd.DataFrame()
     num_words = len(words)
     
+    row_list = []    
     for j in range(0, num_words - seed_len, step):
         #row = data.iloc[idx]
+        row = {}
+        row['id'] = idx
         row['seed'] = words[j: j + seed_len]
         row['next_words'] = words[j+seed_len:j+seed_len+out_len]
-        new_data = new_data.append(row) 
+        row_list.append(row) 
 
     # Checkpoint
-    new_data.to_pickle('data/pickle/'+str(idx)+'.pkl')
+    new_data = pd.DataFrame(row_list)
+    #new_data.to_pickle('data/pickle/'+str(idx)+'.pkl')
         
     return new_data
 
@@ -143,13 +151,15 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    p = Pool(12)
-    new_data_list = p.starmap(row_encode, [(i, data.iloc[i], encoded[i]) for i in range(data.shape[0])])
+    p = Pool(46)
+    new_data_list = p.starmap(row_encode, [(i, encoded[i]) for i in range(data.shape[0])])
     p.close()
     
     # Combine list of new dataframes to single one 
     result = pd.concat(new_data_list)
-    
+   
+    result.to_pickle('data/seeds.pkl')
+ 
     return(result)
       
 # Encoding stuff takes awhile, save it for re-use    
