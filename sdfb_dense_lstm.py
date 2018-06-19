@@ -114,8 +114,8 @@ model, parallel_model = lstm_w_vars()
 
 model.fit_generator(generator=training_generator,
                     validation_data=validation_generator,
-                    nb_epoch=30,
-                    use_multiprocessing=False,
+                    nb_epoch=2,
+                    use_multiprocessing=True,
                     workers=2)
 
 # Get results back out

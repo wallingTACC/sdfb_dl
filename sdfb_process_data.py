@@ -14,7 +14,7 @@ def get_data():
     blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
     
     # Dev - Randomly select 1000
-    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
+    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 100)]
    
     # Don't include doc_ids in independent vars, but need for processing article_text
     doc_ids = blocks.article_id
@@ -50,7 +50,7 @@ def get_articles(doc_ids):
         else:
             article_text.append('')
 
-    with open('article_text.pkl', 'wb') as f:
+    with open('data/article_text.pkl', 'wb') as f:
         pickle.dump(article_text, f)
         
     return article_text
