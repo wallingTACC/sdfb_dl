@@ -58,14 +58,14 @@ np.random.seed(seed)
 
 PROCESS_DATA = True 
 
-if PROCESS_DATA:
+def get_data():
     # Prep the data
     blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
     
     # Dev - Randomly select 1000
-    #blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
-    
-    # Save article ids for matching
+    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
+   
+    # Don't include doc_ids in independent vars, but need for processing article_text
     doc_ids = blocks.article_id
     
     # Pick columns of interest and drop missing
@@ -76,40 +76,32 @@ if PROCESS_DATA:
     blocks.end_date = pd.to_numeric(blocks.end_date, errors='coerce', downcast='integer')
     
     #blocks = blocks.dropna()
-    
-    #X = blocks.loc[:, blocks.columns != 'Block']
-    #y = blocks.loc[:,'Block']
-    
+
     X = blocks
     dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block'])
-    #dummy_y = pd.get_dummies(y)
+    dummy_X['doc_id'] = doc_ids
     
-    num_vars = len(dummy_X.columns)
-    #uniq_y = y.unique().size
-    
-    # Text Data
-    # Need to read in a files in data dir matching article_ids
-    if False:
-        article_text = []
-        data_dir = 'data/ODNB_Entries_as_Textfiles/'
-        for doc_id in doc_ids:
-            file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
-            print(file)
-            text = open(file, 'r').read()
-            if text != None:
-                article_text.append(text)
-            else:
-                article_text.append('')
+    with open('data/doc_ids.pkl', 'wb') as f:
+        pickle.dump(doc_ids, f)
+    dummy_X.to_pickle('data/dummy_X.pkl')
+    return(doc_ids, dummy_X)
 
-        with open('article_text.pkl', 'wb') as f:
-            pickle.dump(article_text, f)
-    else:
-        with open('article_text.pkl', 'rb') as f:
-            print('Loading article_text.pkl')
-            article_text = pickle.load(f)
+def get_articles(doc_ids):
+    article_text = []
+    data_dir = 'data/ODNB_Entries_as_Textfiles/'
+    for doc_id in doc_ids:
+        file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
+        print(file)
+        text = open(file, 'r').read()
+        if text != None:
+            article_text.append(text)
+        else:
+            article_text.append('')
 
-# Get list of already processed docs
-#processed_ids = [int(".".join(f.split(".")[:-1])) for f in os.listdir('data/pickle')]
+    with open('article_text.pkl', 'wb') as f:
+        pickle.dump(article_text, f)
+        
+    return article_text
 
 # Need to encapsulate this part in a function for use with multiprocessing
 def row_encode(idx, words, seed_len=10, out_len=1, step=5):
@@ -141,7 +133,7 @@ def row_encode(idx, words, seed_len=10, out_len=1, step=5):
 #         'The dog ran' -> 'fast'
 #         'dog ran fast' -> 'down'
 #         'ran fast down' -> 'the'
-def encode_text(data, text, seed_len=10, out_len=1, step=5):
+def encode_text(doc_ids, text, seed_len=10, out_len=1, step=5):
     
     # First encode the text
     tokenizer = Tokenizer()
@@ -151,53 +143,84 @@ def encode_text(data, text, seed_len=10, out_len=1, step=5):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    p = Pool(46)
-    new_data_list = p.starmap(row_encode, [(i, encoded[i]) for i in range(data.shape[0])])
+    p = Pool(6)
+    new_data_list = p.starmap(row_encode, [(doc_ids.iloc[i], encoded[i]) for i in range(len(doc_ids))])
     p.close()
     
     # Combine list of new dataframes to single one 
     result = pd.concat(new_data_list)
    
     result.to_pickle('data/seeds.pkl')
+    with open('data/dictionary.pkl', 'wb') as f:
+        pickle.dump(dictionary, f)
  
     return(result)
       
 # Encoding stuff takes awhile, save it for re-use    
 if PROCESS_DATA:
-    encoded = encode_text(dummy_X, article_text)
-    encoded.to_pickle('encoded.pkl')
-    with open('dictionary.pkl', 'wb') as f:
-        pickle.dump(dictionary, f)
+    
+    doc_ids, dummy_X = get_data()
+    article_text = get_articles(doc_ids)
+    seeds = encode_text(doc_ids, article_text)
+    
 else:
-    encoded = pd.read_pickle('encoded.pkl')
-    with open('dictionary.pkl', 'rb') as f:
+    with open('data/doc_ids.pkl', 'rb') as f:
+        doc_ids = pickle.load(f)
+    with open('data/dictionary.pkl', 'rb') as f:
         dictionary = pickle.load(f)
+    with open('data/article_text.pkl', 'rb') as f:
+        article_text = pickle.load(f)
+    dummy_X = pd.read_pickle('data/dummy_X.pkl')
+    seeds = pd.read_pickle('data/seeds.pkl')
 
+# MODEL
 vocab_size = len(dictionary) + 1 # Column 0 is always 0 ?
-X = encoded.loc[:, encoded.columns != 'next_words']
+
+#X = encoded.loc[:, encoded.columns != 'next_words']
 #X_text = encoded['seed']
 
 
-seqs = [i for i in encoded['next_words']]
+#seqs = [i for i in encoded['next_words']]
 #y = k_utils.to_categorical(seqs, num_classes=vocab_size) # Stanard is to one-hot-encode the output
-y = np.array(seqs) # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
+#y = np.array(seqs) # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
 
 # Save temp results
 #with open('temp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
 #    pickle.dump([X, y], f)
     
 # Split into training and test sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+#X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Split X into text (seed) and normal vars
 # Must put text into a matrix
-X_text_mat_train = np.array([i for i in X_train['seed']])
-X_vars_train = X_train.loc[:, X_train.columns != 'seed']
+#X_text_mat_train = np.array([i for i in X_train['seed']])
+#X_vars_train = X_train.loc[:, X_train.columns != 'seed']
 
-X_text_mat_test = np.array([i for i in X_test['seed']])
-X_vars_test = X_test.loc[:, X_train.columns != 'seed']
+#X_text_mat_test = np.array([i for i in X_test['seed']])
+#X_vars_test = X_test.loc[:, X_train.columns != 'seed']
 
-num_vars = len(X_vars_train.columns) # Reset num_vars after above manipulations
+#num_vars = len(X_vars_train.columns) # Reset num_vars after above manipulations
+
+
+# Data Generator
+from random import shuffle
+num_samples = len(seeds)
+num_train = int(num_samples*.7)
+num_val = int(num_samples*.1)
+num_test = int(num_samples*.2)
+indices = [i for i in range(num_samples)]
+shuffle(indices)
+train_idx = indices[:num_train]
+val_idx = indices[(num_train+1):(num_train+num_val)]
+test_idx = indices[(num_train+num_val+1):]
+
+from sdfb_data_generator import SDFBDataGenerator
+params = {'batch_size': 64,
+          'shuffle': True}
+training_generator = SDFBDataGenerator(train_idx, **params)
+validation_generator = SDFBDataGenerator(val_idx, **params)
+
+num_vars = len(dummy_X.columns)-1 # Will remove doc_id
 
 # Build our model to predict words from variables
    
@@ -225,8 +248,10 @@ def lstm_w_vars():
 
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
 
-    parallel_model = multi_gpu_model(model)
-    parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+    #parallel_model = multi_gpu_model(model, gpus=2)
+    #parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+    
+    parallel_model = None
     
     return model, parallel_model
 
@@ -237,8 +262,14 @@ filepath="weights-{epoch:02d}.hdf5"
 checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=50)
 callbacks_list = [checkpoint]
 
-parallel_model.fit([X_text_mat_train, X_vars_train], y_train, epochs=500, batch_size=512, callbacks=callbacks_list)
+#parallel_model.fit([X_text_mat_train, X_vars_train], y_train, epochs=500, batch_size=512, callbacks=callbacks_list)
 
+model.fit_generator(generator=training_generator,
+                    validation_data=validation_generator,
+                    use_multiprocessing=True,
+                    workers=2)
+
+# Get results back out
 model.set_weights(parallel_model.get_weights())
 
 model.save('final_weights.h5')
