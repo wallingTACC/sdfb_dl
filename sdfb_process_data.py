@@ -2,18 +2,12 @@
 import pandas as pd
 import numpy as np
 import random as rand
-import os
 from multiprocessing import Pool
 import pickle
 
 import keras.preprocessing.text as kpt
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing import sequence
-
-seed = 123
-np.random.seed(seed)
-
-PROCESS_DATA = True 
 
 def get_data():
     # Prep the data
@@ -41,6 +35,7 @@ def get_data():
     with open('data/doc_ids.pkl', 'wb') as f:
         pickle.dump(doc_ids, f)
     dummy_X.to_pickle('data/dummy_X.pkl')
+    
     return(doc_ids, dummy_X)
 
 def get_articles(doc_ids):
@@ -109,10 +104,15 @@ def encode_text(doc_ids, text, seed_len=10, out_len=1, step=5):
         pickle.dump(dictionary, f)
  
     return(result)
-      
-# Encoding stuff takes awhile, save it for re-use    
+
+
+
+PROCESS_DATA = False 
+
+# Encoding stuff takes awhile, save it for re-use 
 if PROCESS_DATA:
-    
+    seed = 123
+    rand.seed(seed)
     doc_ids, dummy_X = get_data()
     article_text = get_articles(doc_ids)
     seeds = encode_text(doc_ids, article_text)

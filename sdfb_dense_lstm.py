@@ -16,24 +16,16 @@ import keras.utils as k_utils
 from keras.utils import multi_gpu_model
 from keras.callbacks import ModelCheckpoint
 import tensorflow as tf
-
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import KFold
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-
-import pandas as pd
-import numpy as np
-import random as rand
-import os
-from multiprocessing import Pool
-import pickle
-
-if 'session' in locals() and session is not None:
-    print('Close interactive session')
-    session.close()
+        
+# Execute process data to load variables.  NOTE: very unpythonic
+from sdfb_process_data import *
 
 # Configure Tensorflow session
+
+#if 'session' in locals() and session is not None:
+#    print('Close interactive session')
+#    session.close()
+
 #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.3)
 #sess = tf.Session(config=tf.ConfigProto(
 #  allow_soft_placement=True, log_device_placement=True))
@@ -50,164 +42,25 @@ if 'session' in locals() and session is not None:
 #config.gpu_options.per_process_gpu_memory_fraction = 0.3
 #set_session(tf.Session(config=config))
 
-# Set seeds to any randomness below
-seed = 123
-np.random.seed(seed)
-
-PROCESS_DATA = True 
-
-def get_data():
-    # Prep the data
-    blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
-    
-    # Dev - Randomly select 1000
-    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
-   
-    # Don't include doc_ids in independent vars, but need for processing article_text
-    doc_ids = blocks.article_id
-    
-    # Pick columns of interest and drop missing
-    blocks = blocks[['start_date', 'end_date', 'denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block']]
-    
-    # Clean up start_date and end_date
-    blocks.start_date = pd.to_numeric(blocks.start_date, errors='coerce', downcast='integer')
-    blocks.end_date = pd.to_numeric(blocks.end_date, errors='coerce', downcast='integer')
-    
-    #blocks = blocks.dropna()
-
-    X = blocks
-    dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block'])
-    dummy_X['doc_id'] = doc_ids
-    
-    with open('data/doc_ids.pkl', 'wb') as f:
-        pickle.dump(doc_ids, f)
-    dummy_X.to_pickle('data/dummy_X.pkl')
-    return(doc_ids, dummy_X)
-
-def get_articles(doc_ids):
-    article_text = []
-    data_dir = 'data/ODNB_Entries_as_Textfiles/'
-    for doc_id in doc_ids:
-        file = data_dir + 'odnb_id_' + str(doc_id) + '.txt'
-        print(file)
-        text = open(file, 'r').read()
-        if text != None:
-            article_text.append(text)
-        else:
-            article_text.append('')
-
-    with open('article_text.pkl', 'wb') as f:
-        pickle.dump(article_text, f)
-        
-    return article_text
-
-# Need to encapsulate this part in a function for use with multiprocessing
-def row_encode(doc_id, words, seed_len=10, out_len=1, step=5):
-
-    print(doc_id)
-    num_words = len(words)
-    
-    row_list = []    
-    for j in range(0, num_words - seed_len, step):
-        #row = data.iloc[idx]
-        row = {}
-        row['doc_id'] = doc_id
-        row['seed'] = words[j: j + seed_len]
-        row['next_words'] = words[j+seed_len:j+seed_len+out_len]
-        row_list.append(row) 
-
-    # Checkpoint
-    new_data = pd.DataFrame(row_list)
-    #new_data.to_pickle('data/pickle/'+str(idx)+'.pkl')
-        
-    return new_data
-
-# Need to create 'seed' and 'next' text examples, where seed is length 3 and next length 1 word
-# Each 'seed' becomes an observation for training
-# Ex: 'The dog ran fast down the road'
-#         'The dog ran' -> 'fast'
-#         'dog ran fast' -> 'down'
-#         'ran fast down' -> 'the'
-def encode_text(doc_ids, text, seed_len=10, out_len=1, step=5):
-    
-    # First encode the text
-    tokenizer = Tokenizer()
-    tokenizer.fit_on_texts(text)
-    encoded = tokenizer.texts_to_sequences(text)
-    
-    global dictionary # Save results for output
-    dictionary = tokenizer.word_index
-    
-    p = Pool(6)
-    new_data_list = p.starmap(row_encode, [(doc_ids.iloc[i], encoded[i]) for i in range(len(doc_ids))])
-    p.close()
-    
-    # Combine list of new dataframes to single one 
-    result = pd.concat(new_data_list)
-   
-    result.to_pickle('data/seeds.pkl')
-    with open('data/dictionary.pkl', 'wb') as f:
-        pickle.dump(dictionary, f)
- 
-    return(result)
-      
-# Encoding stuff takes awhile, save it for re-use    
-if PROCESS_DATA:
-    
-    doc_ids, dummy_X = get_data()
-    article_text = get_articles(doc_ids)
-    seeds = encode_text(doc_ids, article_text)
-    
-else:
-    with open('data/doc_ids.pkl', 'rb') as f:
-        doc_ids = pickle.load(f)
-    with open('data/dictionary.pkl', 'rb') as f:
-        dictionary = pickle.load(f)
-    with open('data/article_text.pkl', 'rb') as f:
-        article_text = pickle.load(f)
-    dummy_X = pd.read_pickle('data/dummy_X.pkl')
-    seeds = pd.read_pickle('data/seeds.pkl')
-
 # MODEL
 vocab_size = len(dictionary) + 1 # Column 0 is always 0 ?
-
-#X = encoded.loc[:, encoded.columns != 'next_words']
-#X_text = encoded['seed']
-
-
-#seqs = [i for i in encoded['next_words']]
-#y = k_utils.to_categorical(seqs, num_classes=vocab_size) # Stanard is to one-hot-encode the output
-#y = np.array(seqs) # one-hot encoding leads to out of memory errors, instead use straight integers with categorical_cross_entropy loss
-
-# Save temp results
-#with open('temp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-#    pickle.dump([X, y], f)
-    
-# Split into training and test sets
-#X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Split X into text (seed) and normal vars
-# Must put text into a matrix
-#X_text_mat_train = np.array([i for i in X_train['seed']])
-#X_vars_train = X_train.loc[:, X_train.columns != 'seed']
-
-#X_text_mat_test = np.array([i for i in X_test['seed']])
-#X_vars_test = X_test.loc[:, X_train.columns != 'seed']
-
-#num_vars = len(X_vars_train.columns) # Reset num_vars after above manipulations
-
+num_vars = len(dummy_X.columns)-1 # Drop doc_id when we pass to model iterations
 
 # Data Generator
 from random import shuffle
+
+# NOTE: Not exact, i.e. num_samples != num_train+num_val+num_test
 num_samples = len(seeds)
 num_train = int(num_samples*.7)
 num_val = int(num_samples*.1)
 num_test = int(num_samples*.2)
+
+
 indices = [i for i in range(num_samples)]
 shuffle(indices)
 train_idx = indices[:num_train]
-val_idx = indices[(num_train+1):(num_train+num_val)]
-test_idx = indices[(num_train+num_val+1):]
+val_idx = indices[(num_train):(num_train+num_val)]
+test_idx = indices[(num_train+num_val):]
 
 from sdfb_data_generator import SDFBDataGenerator
 params = {'batch_size': 64,
@@ -215,7 +68,7 @@ params = {'batch_size': 64,
 training_generator = SDFBDataGenerator(train_idx, **params)
 validation_generator = SDFBDataGenerator(val_idx, **params)
 
-num_vars = len(dummy_X.columns)-1 # Will remove doc_id
+# Will remove doc_id
 
 # Build our model to predict words from variables
    
@@ -253,19 +106,20 @@ def lstm_w_vars():
 model, parallel_model = lstm_w_vars()
 
 # checkpoint
-filepath="weights-{epoch:02d}.hdf5"
-checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=50)
-callbacks_list = [checkpoint]
+#filepath="weights-{epoch:02d}.hdf5"
+#checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=50)
+#callbacks_list = [checkpoint]
 
 #parallel_model.fit([X_text_mat_train, X_vars_train], y_train, epochs=500, batch_size=512, callbacks=callbacks_list)
 
 model.fit_generator(generator=training_generator,
                     validation_data=validation_generator,
-                    use_multiprocessing=True,
+                    nb_epoch=30,
+                    use_multiprocessing=False,
                     workers=2)
 
 # Get results back out
-model.set_weights(parallel_model.get_weights())
+#model.set_weights(parallel_model.get_weights())
 
 model.save('final_weights.h5')
 
