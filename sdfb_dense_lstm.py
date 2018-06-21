@@ -8,8 +8,8 @@ It involves merging standard NN with LSTM based ones.
 
 @author: walling
 """
-from keras.models import Sequential
-from keras.layers import Dense, LSTM, SimpleRNN, Embedding, Activation, TimeDistributed, Dropout, Merge
+from keras.models import Sequential, Model
+from keras.layers import Input, Dense, LSTM, SimpleRNN, Embedding, Activation, TimeDistributed, Dropout, Merge, Concatenate, concatenate
 from keras.wrappers.scikit_learn import KerasClassifier
 import keras.utils as k_utils
 
@@ -49,13 +49,13 @@ num_vars = len(dummy_X.columns)-1 # Drop doc_id when we pass to model iterations
 # Data Generator
 from random import shuffle
 
+# Create train, val, test subsets
+
 # NOTE: Not exact, i.e. num_samples != num_train+num_val+num_test
 num_samples = len(seeds)
 num_train = int(num_samples*.7)
 num_val = int(num_samples*.1)
 num_test = int(num_samples*.2)
-
-
 indices = [i for i in range(num_samples)]
 shuffle(indices)
 train_idx = indices[:num_train]
@@ -72,7 +72,7 @@ validation_generator = SDFBDataGenerator(val_idx, **params)
 
 # Build our model to predict words from variables
    
-def lstm_w_vars():
+def lstm_w_vars_sequential():
     
     text_seed_len = 10
     
@@ -96,14 +96,40 @@ def lstm_w_vars():
 
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
 
-    #parallel_model = multi_gpu_model(model, gpus=2)
-    #parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
-    
-    parallel_model = None
+    parallel_model = multi_gpu_model(model, gpus=2)
+    parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
     
     return model, parallel_model
 
-model, parallel_model = lstm_w_vars()
+def lstm_w_vars_functional():
+    
+    text_seed_len = 10
+    
+    # LSTM 
+    lstm_input = Input(shape=(text_seed_len,))
+    lstm_model = Embedding(input_dim=vocab_size, output_dim=10, input_length=text_seed_len)(lstm_input)
+    lstm_model = LSTM(units=10, return_sequences=True)(lstm_model)
+    lstm_model = LSTM(units=10, return_sequences=False)(lstm_model)
+    
+    # Standard
+    var_input = Input(shape=(num_vars,))
+    var_model = Dense(units=64, activation='relu')(var_input)
+    var_model = Dense(units=64, activation='relu')(var_model)
+    
+    # Merge and Output
+    cat = concatenate([lstm_model, var_model])
+    output = Dense(vocab_size, activation='softmax')(cat)
+    
+    model = Model(inputs=[lstm_input, var_input], outputs=[output])
+
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+
+    parallel_model = multi_gpu_model(model, gpus=2)
+    parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+    
+    return model, parallel_model
+
+model, parallel_model = lstm_w_vars_functional()
 
 # checkpoint
 #filepath="weights-{epoch:02d}.hdf5"
