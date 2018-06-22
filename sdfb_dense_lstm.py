@@ -9,13 +9,14 @@ It involves merging standard NN with LSTM based ones.
 @author: walling
 """
 from keras.models import Sequential, Model
-from keras.layers import Input, Dense, LSTM, SimpleRNN, Embedding, Activation, TimeDistributed, Dropout, Merge, Concatenate, concatenate
+from keras.layers import Input, Dense, LSTM, SimpleRNN, Embedding, Activation, TimeDistributed, Dropout, Concatenate, concatenate
 from keras.wrappers.scikit_learn import KerasClassifier
 import keras.utils as k_utils
 
 from keras.utils import multi_gpu_model
 from keras.callbacks import ModelCheckpoint
 import tensorflow as tf
+import os
         
 # Execute process data to load variables.  NOTE: very unpythonic
 from sdfb_process_data import *
@@ -63,7 +64,7 @@ val_idx = indices[(num_train):(num_train+num_val)]
 test_idx = indices[(num_train+num_val):]
 
 from sdfb_data_generator import SDFBDataGenerator
-params = {'batch_size': 64,
+params = {'batch_size': 512,
           'shuffle': True}
 training_generator = SDFBDataGenerator(train_idx, **params)
 validation_generator = SDFBDataGenerator(val_idx, **params)
@@ -89,7 +90,7 @@ def lstm_w_vars_sequential():
     
     # Merge
     model = Sequential()
-    model.add(Merge([lstm_model, var_model], mode = 'concat'))
+    model.add(Concatenate([lstm_model, var_model]))
     model.add(Dense(vocab_size))
     model.add(Activation('softmax'))
     
@@ -124,7 +125,7 @@ def lstm_w_vars_functional():
 
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
 
-    parallel_model = multi_gpu_model(model, gpus=2)
+    parallel_model = multi_gpu_model(model, gpus=4)
     parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
     
     return model, parallel_model
@@ -132,17 +133,19 @@ def lstm_w_vars_functional():
 model, parallel_model = lstm_w_vars_functional()
 
 # checkpoint
-#filepath="weights-{epoch:02d}.hdf5"
-#checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=50)
-#callbacks_list = [checkpoint]
+os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Not supported on $WORK
+filepath="data/weights-{epoch:02d}.hdf5"
+checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=1)
+callbacks_list = [checkpoint]
 
 #parallel_model.fit([X_text_mat_train, X_vars_train], y_train, epochs=500, batch_size=512, callbacks=callbacks_list)
 
-model.fit_generator(generator=training_generator,
+parallel_model.fit_generator(generator=training_generator,
                     validation_data=validation_generator,
-                    nb_epoch=2,
-                    use_multiprocessing=True,
-                    workers=2)
+                    nb_epoch=100,
+                    use_multiprocessing=False,
+                    workers=16,
+                    callbacks=callbacks_list)
 
 # Get results back out
 #model.set_weights(parallel_model.get_weights())
