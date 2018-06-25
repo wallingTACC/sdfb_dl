@@ -12,6 +12,7 @@ from keras.models import Sequential, Model
 from keras.layers import Input, Dense, LSTM, SimpleRNN, Embedding, Activation, TimeDistributed, Dropout, Concatenate, concatenate
 from keras.wrappers.scikit_learn import KerasClassifier
 import keras.utils as k_utils
+from keras.utils import plot_model
 
 from keras.utils import multi_gpu_model
 from keras.callbacks import ModelCheckpoint
@@ -125,6 +126,9 @@ def lstm_w_vars_functional():
 
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
 
+    print(model.summary())
+    plot_model(model, to_file='sdfb_dense_lstm.png')
+
     parallel_model = multi_gpu_model(model, gpus=4)
     parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
     
@@ -144,13 +148,12 @@ parallel_model.fit_generator(generator=training_generator,
                     validation_data=validation_generator,
                     nb_epoch=100,
                     use_multiprocessing=False,
-                    workers=16,
                     callbacks=callbacks_list)
 
 # Get results back out
 #model.set_weights(parallel_model.get_weights())
 
-model.save('final_weights.h5')
+#model.save('final_weights.h5')
 
 #predict = model.predict([X_text_mat_test, X_vars_test])
 

@@ -14,7 +14,7 @@ def get_data():
     blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
     
     # Dev - Randomly select 1000
-    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 100)]
+    #blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 100)]
    
     # Don't include doc_ids in independent vars, but need for processing article_text
     doc_ids = blocks.article_id
@@ -56,7 +56,7 @@ def get_articles(doc_ids):
     return article_text
 
 # Need to encapsulate this part in a function for use with multiprocessing
-def row_encode(doc_id, words, seed_len=10, out_len=1, step=5):
+def row_encode(doc_id, words, seed_len=1, out_len=1, step=1):
 
     print(doc_id)
     num_words = len(words)
@@ -82,7 +82,7 @@ def row_encode(doc_id, words, seed_len=10, out_len=1, step=5):
 #         'The dog ran' -> 'fast'
 #         'dog ran fast' -> 'down'
 #         'ran fast down' -> 'the'
-def encode_text(doc_ids, text, seed_len=10, out_len=1, step=5):
+def encode_text(doc_ids, text, seed_len=1, out_len=1, step=1):
     
     # First encode the text
     tokenizer = Tokenizer()
@@ -92,7 +92,7 @@ def encode_text(doc_ids, text, seed_len=10, out_len=1, step=5):
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    p = Pool(6)
+    p = Pool(32)
     new_data_list = p.starmap(row_encode, [(doc_ids.iloc[i], encoded[i]) for i in range(len(doc_ids))])
     p.close()
     

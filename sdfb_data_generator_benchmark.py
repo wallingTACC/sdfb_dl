@@ -30,4 +30,4 @@ training_generator = SDFBDataGenerator(train_idx, **params)
 
 import timeit
 
-timeit.timeit('training_generator.__getitem__()', number=1000)
+timeit.timeit(training_generator.__getitem__, number=1000)
