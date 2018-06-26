@@ -56,11 +56,11 @@ class SDFBDataGenerator(keras.utils.Sequence):
         seeds_temp = self.seeds.iloc[list_IDs_temp]
         
         # Join seeds_temp to dummy_X on doc_id=id
-        joined_temp = self.dummy_X.merge(seeds_temp, on='doc_id', how='inner')
+        X_vars_train = self.dummy_X.merge(seeds_temp, on='doc_id', how='inner')
         
-        X_text_mat_train = np.array([i for i in joined_temp['seed']])
-        X_vars_train = joined_temp.drop(['doc_id', 'seed', 'next_words'], axis=1)
-        y_train = np.array([i for i in joined_temp['next_words']])
+        y_train = np.array(X_vars_train['next_words'].tolist())
+        X_text_mat_train = np.array(X_vars_train['seed'].tolist())
+        X_vars_train.drop(['doc_id', 'seed', 'next_words'], axis=1, inplace=True)
         
         return X_text_mat_train, X_vars_train, y_train
     

@@ -8,6 +8,7 @@ It involves merging standard NN with LSTM based ones.
 
 @author: walling
 """
+import keras.backend as K
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, LSTM, SimpleRNN, Embedding, Activation, TimeDistributed, Dropout, Concatenate, concatenate
 from keras.wrappers.scikit_learn import KerasClassifier
@@ -17,6 +18,7 @@ from keras.utils import plot_model
 from keras.utils import multi_gpu_model
 from keras.callbacks import ModelCheckpoint
 import tensorflow as tf
+import numpy as np
 import os
         
 # Execute process data to load variables.  NOTE: very unpythonic
@@ -65,7 +67,7 @@ val_idx = indices[(num_train):(num_train+num_val)]
 test_idx = indices[(num_train+num_val):]
 
 from sdfb_data_generator import SDFBDataGenerator
-params = {'batch_size': 512,
+params = {'batch_size': 32,
           'shuffle': True}
 training_generator = SDFBDataGenerator(train_idx, **params)
 validation_generator = SDFBDataGenerator(val_idx, **params)
@@ -73,45 +75,21 @@ validation_generator = SDFBDataGenerator(val_idx, **params)
 # Will remove doc_id
 
 # Build our model to predict words from variables
-   
-def lstm_w_vars_sequential():
-    
-    text_seed_len = 10
-    
-    # LSTM 
-    lstm_model = Sequential()
-    lstm_model.add(Embedding(input_dim=vocab_size, output_dim=10, input_length=text_seed_len)) # Output_dim similar to units, is tunable
-    lstm_model.add(LSTM(units=10, return_sequences=True))
-    lstm_model.add(LSTM(units=10, return_sequences=False))
-    
-    # Standard
-    var_model = Sequential()
-    var_model.add(Dense(units=64, activation='relu', input_dim=num_vars))
-    var_model.add(Dense(units=64, activation='relu'))
-    
-    # Merge
-    model = Sequential()
-    model.add(Concatenate([lstm_model, var_model]))
-    model.add(Dense(vocab_size))
-    model.add(Activation('softmax'))
-    
+def perplexity(y_true, y_pred):
+    """
+    The perplexity metric.
+    """
+    cross_entropy = K.sparse_categorical_crossentropy(y_true, y_pred)
+    perplexity = np.e**cross_entropy
+    return perplexity
 
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
-
-    parallel_model = multi_gpu_model(model, gpus=2)
-    parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
-    
-    return model, parallel_model
-
-def lstm_w_vars_functional():
-    
-    text_seed_len = 10
+def lstm_w_vars_functional(text_seed_len=10, gpus=0):
     
     # LSTM 
     lstm_input = Input(shape=(text_seed_len,))
-    lstm_model = Embedding(input_dim=vocab_size, output_dim=10, input_length=text_seed_len)(lstm_input)
-    lstm_model = LSTM(units=10, return_sequences=True)(lstm_model)
-    lstm_model = LSTM(units=10, return_sequences=False)(lstm_model)
+    lstm_model = Embedding(input_dim=vocab_size, output_dim=50, input_length=text_seed_len)(lstm_input)
+    lstm_model = LSTM(units=50, return_sequences=True)(lstm_model)
+    lstm_model = LSTM(units=50, return_sequences=False)(lstm_model)
     
     # Standard
     var_input = Input(shape=(num_vars,))
@@ -124,31 +102,71 @@ def lstm_w_vars_functional():
     
     model = Model(inputs=[lstm_input, var_input], outputs=[output])
 
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=[perplexity, 'sparse_categorical_accuracy'])
 
     print(model.summary())
-    plot_model(model, to_file='sdfb_dense_lstm.png')
-
-    parallel_model = multi_gpu_model(model, gpus=4)
-    parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+    #plot_model(model, to_file='sdfb_dense_lstm.png')
+    
+    if gpus > 0:
+        parallel_model = multi_gpu_model(model, gpus=gpus)
+        parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=[perplexity, 'sparse_categorical_accuracy'])
+    else:
+        parallel_model = None
     
     return model, parallel_model
 
-model, parallel_model = lstm_w_vars_functional()
+def lstm_only_functional(text_seed_len=10, gpus=0):
+    lstm_input = Input(shape=(text_seed_len,))
+    lstm_model = Embedding(input_dim=vocab_size, output_dim=50, input_length=text_seed_len)(lstm_input)
+    #lstm_model = LSTM(units=50, return_sequences=True)(lstm_model)
+    #lstm_model = Dropout(0.2)(lstm_model)
+    lstm_model = LSTM(units=50, return_sequences=True)(lstm_model)
+    lstm_model = Dropout(0.2)(lstm_model)
+    lstm_model = LSTM(units=50, return_sequences=True)(lstm_model)
+    lstm_model = Dropout(0.2)(lstm_model)
+    lstm_model = LSTM(units=50, return_sequences=False)(lstm_model)
+    lstm_model = Dropout(0.2)(lstm_model)
+    output = Dense(vocab_size, activation='softmax')(lstm_model)
+    
+    # Specify null_input so we can use the same data genators, i.e. just ignore the variable input
+    null_input = Input(shape=(num_vars,))
+    
+    model = Model(inputs=[lstm_input, null_input], outputs=[output])
+    
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+
+    print(model.summary())
+    #plot_model(model, to_file='sdfb_lstm.png')
+    if gpus > 0:
+        parallel_model = multi_gpu_model(model, gpus=gpus)
+        parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
+    else:
+        parallel_model = None
+    
+    return model, parallel_model
+
+#model, parallel_model = lstm_w_vars_functional()
+model, parallel_model = lstm_only_functional()
 
 # checkpoint
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Not supported on $WORK
 filepath="data/weights-{epoch:02d}.hdf5"
 checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=False, save_weights_only=True, mode='auto', period=1)
-callbacks_list = [checkpoint]
+callbacks_list = [] #[checkpoint]
 
 #parallel_model.fit([X_text_mat_train, X_vars_train], y_train, epochs=500, batch_size=512, callbacks=callbacks_list)
 
-parallel_model.fit_generator(generator=training_generator,
+model.fit_generator(generator=training_generator,
                     validation_data=validation_generator,
                     nb_epoch=100,
                     use_multiprocessing=False,
                     callbacks=callbacks_list)
+
+# Evaluation
+
+
+# Test Data
+
 
 # Get results back out
 #model.set_weights(parallel_model.get_weights())

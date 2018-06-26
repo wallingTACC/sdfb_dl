@@ -14,23 +14,22 @@ def get_data():
     blocks = pd.read_csv('data/master_data_7_31_17_w_blocks.csv', low_memory=False)
     
     # Dev - Randomly select 1000
-    #blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 100)]
+    blocks = blocks.iloc[rand.sample(range(len(blocks.index)), 1000)]
    
     # Don't include doc_ids in independent vars, but need for processing article_text
-    doc_ids = blocks.article_id
+    blocks['doc_id'] = blocks.article_id
     
     # Pick columns of interest and drop missing
-    blocks = blocks[['start_date', 'end_date', 'denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block']]
+    blocks = blocks[['doc_id', 'start_date', 'end_date', 'denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block']]
     
     # Clean up start_date and end_date
     blocks.start_date = pd.to_numeric(blocks.start_date, errors='coerce', downcast='integer')
     blocks.end_date = pd.to_numeric(blocks.end_date, errors='coerce', downcast='integer')
     
-    #blocks = blocks.dropna()
+    blocks = blocks.dropna()
 
     X = blocks
     dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block'])
-    dummy_X['doc_id'] = doc_ids
     
     with open('data/doc_ids.pkl', 'wb') as f:
         pickle.dump(doc_ids, f)
@@ -56,7 +55,7 @@ def get_articles(doc_ids):
     return article_text
 
 # Need to encapsulate this part in a function for use with multiprocessing
-def row_encode(doc_id, words, seed_len=1, out_len=1, step=1):
+def row_encode(doc_id, words, seed_len=10, out_len=1, step=5):
 
     print(doc_id)
     num_words = len(words)
@@ -82,17 +81,20 @@ def row_encode(doc_id, words, seed_len=1, out_len=1, step=1):
 #         'The dog ran' -> 'fast'
 #         'dog ran fast' -> 'down'
 #         'ran fast down' -> 'the'
-def encode_text(doc_ids, text, seed_len=1, out_len=1, step=1):
+def encode_text(doc_ids, text):
     
     # First encode the text
     tokenizer = Tokenizer()
     tokenizer.fit_on_texts(text)
     encoded = tokenizer.texts_to_sequences(text)
     
+    # pad_sequences????
+    #padded = sequence.pad_sequences(text,   )
+    
     global dictionary # Save results for output
     dictionary = tokenizer.word_index
     
-    p = Pool(32)
+    p = Pool(4)
     new_data_list = p.starmap(row_encode, [(doc_ids.iloc[i], encoded[i]) for i in range(len(doc_ids))])
     p.close()
     
