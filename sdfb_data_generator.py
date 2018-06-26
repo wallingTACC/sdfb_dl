@@ -16,8 +16,6 @@ class SDFBDataGenerator(keras.utils.Sequence):
         self.on_epoch_end()
         
         # Preload the data
-        with open('data/doc_ids.pkl', 'rb') as f:
-            self.doc_ids = pickle.load(f)
         with open('data/dictionary.pkl', 'rb') as f:
             self.dictionary = pickle.load(f)
         with open('data/article_text.pkl', 'rb') as f:

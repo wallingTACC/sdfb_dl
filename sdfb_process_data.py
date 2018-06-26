@@ -31,11 +31,12 @@ def get_data():
     X = blocks
     dummy_X = pd.get_dummies(X, columns=['denom', 'occupation', 'gender', 'baptized', 'married', 'faith', 'Block'])
     
-    with open('data/doc_ids.pkl', 'wb') as f:
-        pickle.dump(doc_ids, f)
+    #with open('data/doc_ids.pkl', 'wb') as f:
+    #    pickle.dump(doc_ids, f)
+    
     dummy_X.to_pickle('data/dummy_X.pkl')
     
-    return(doc_ids, dummy_X)
+    return(dummy_X['doc_id'], dummy_X)
 
 def get_articles(doc_ids):
     article_text = []
@@ -84,15 +85,21 @@ def row_encode(doc_id, words, seed_len=10, out_len=1, step=5):
 def encode_text(doc_ids, text):
     
     # First encode the text
-    tokenizer = Tokenizer()
-    tokenizer.fit_on_texts(text)
-    encoded = tokenizer.texts_to_sequences(text)
+    num_words = 20000
+    tk = kpt.Tokenizer(oov_token='UNK', num_words=num_words+1)
+    tk.fit_on_texts(text)
+    
+    # Note hack to make Tokenizer only keep num_words: https://github.com/keras-team/keras/issues/8092
+    tk.word_index = {e:i for e,i in tk.word_index.items() if i <= num_words} # <= because tokenizer is 1 indexed
+    tk.word_index[tk.oov_token] = num_words + 1
+    
+    encoded = tk.texts_to_sequences(text)
     
     # pad_sequences????
     #padded = sequence.pad_sequences(text,   )
     
     global dictionary # Save results for output
-    dictionary = tokenizer.word_index
+    dictionary = tk.word_index
     
     p = Pool(4)
     new_data_list = p.starmap(row_encode, [(doc_ids.iloc[i], encoded[i]) for i in range(len(doc_ids))])
@@ -120,8 +127,6 @@ if PROCESS_DATA:
     seeds = encode_text(doc_ids, article_text)
     
 else:
-    with open('data/doc_ids.pkl', 'rb') as f:
-        doc_ids = pickle.load(f)
     with open('data/dictionary.pkl', 'rb') as f:
         dictionary = pickle.load(f)
     with open('data/article_text.pkl', 'rb') as f:

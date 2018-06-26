@@ -89,27 +89,36 @@ def lstm_w_vars_functional(text_seed_len=10, gpus=0):
     lstm_input = Input(shape=(text_seed_len,))
     lstm_model = Embedding(input_dim=vocab_size, output_dim=50, input_length=text_seed_len)(lstm_input)
     lstm_model = LSTM(units=50, return_sequences=True)(lstm_model)
+    lstm_model = Dropout(0.2)(lstm_model)
+    lstm_model = LSTM(units=50, return_sequences=True)(lstm_model)
+    lstm_model = Dropout(0.2)(lstm_model)
     lstm_model = LSTM(units=50, return_sequences=False)(lstm_model)
+    lstm_model = Dropout(0.2)(lstm_model)
     
     # Standard
     var_input = Input(shape=(num_vars,))
     var_model = Dense(units=64, activation='relu')(var_input)
+    var_model = Dropout(0.2)(var_model)
     var_model = Dense(units=64, activation='relu')(var_model)
+    var_model = Dropout(0.2)(var_model)
+    var_model = Dense(units=64, activation='relu')(var_model)
+    var_model = Dropout(0.2)(var_model)
     
     # Merge and Output
     cat = concatenate([lstm_model, var_model])
+    cat = Dropout(0.2)(cat)
     output = Dense(vocab_size, activation='softmax')(cat)
     
     model = Model(inputs=[lstm_input, var_input], outputs=[output])
 
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=[perplexity, 'sparse_categorical_accuracy'])
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
 
     print(model.summary())
     #plot_model(model, to_file='sdfb_dense_lstm.png')
     
     if gpus > 0:
         parallel_model = multi_gpu_model(model, gpus=gpus)
-        parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=[perplexity, 'sparse_categorical_accuracy'])
+        parallel_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['sparse_categorical_accuracy'])
     else:
         parallel_model = None
     
@@ -126,6 +135,7 @@ def lstm_only_functional(text_seed_len=10, gpus=0):
     lstm_model = Dropout(0.2)(lstm_model)
     lstm_model = LSTM(units=50, return_sequences=False)(lstm_model)
     lstm_model = Dropout(0.2)(lstm_model)
+    
     output = Dense(vocab_size, activation='softmax')(lstm_model)
     
     # Specify null_input so we can use the same data genators, i.e. just ignore the variable input
@@ -145,8 +155,8 @@ def lstm_only_functional(text_seed_len=10, gpus=0):
     
     return model, parallel_model
 
-#model, parallel_model = lstm_w_vars_functional()
-model, parallel_model = lstm_only_functional()
+model, parallel_model = lstm_w_vars_functional()
+#model, parallel_model = lstm_only_functional()
 
 # checkpoint
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Not supported on $WORK
@@ -158,7 +168,7 @@ callbacks_list = [] #[checkpoint]
 
 model.fit_generator(generator=training_generator,
                     validation_data=validation_generator,
-                    nb_epoch=100,
+                    epochs=100,
                     use_multiprocessing=False,
                     callbacks=callbacks_list)
 
